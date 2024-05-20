@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:ComputerShop"
         xmlns:customControl="clr-namespace:ComputerShop.CustomControl"
         mc:Ignorable="d"
-        Title="MainWindow" Height="550" Width="1000"
+        Title="MainWindow" Height="560" Width="1000"
         Loaded="OnWindowLoaded"
         Unloaded="OnWindowUnloaded">
     <Window.Resources>
@@ -102,7 +102,31 @@
         </TabItem>
         <TabItem Header="Запросы">
             <Grid>
-                <DataGrid x:Name="QueryTable"></DataGrid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="5*"></RowDefinition>
+                    <RowDefinition Height="5*"></RowDefinition>
+                </Grid.RowDefinitions>
+                
+                <DataGrid x:Name="QueryTable" IsReadOnly="True"></DataGrid>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Visible">
+                    <StackPanel>
+                        <WrapPanel x:Name="CheckboxPanel" Orientation="Horizontal">
+                            <customControl:CheckboxGroup Label="Клиент:" LabelID="ID Клиента"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Сотрудник:" LabelID="ID Сотрудника"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Поставка:" LabelID="ID Поставки"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Акция:" LabelID="ID Акции"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Категория:" LabelID="ID Категории"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Производитель:" LabelID="ID Производителя"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Страна:" LabelID="ID Страны"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Поставщик:" LabelID="ID Поставщика"></customControl:CheckboxGroup>
+                            <customControl:CheckboxGroup Label="Город:" LabelID="ID Города"></customControl:CheckboxGroup>
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0 10 0 0">
+                            <Button Height="25" Click="OnSelectClicked" Width="150">Выполнить запрос</Button>
+                            <Button Height="25" Click="OnCancelQuery" Margin="10 0 0 0"  Width="150">Сбросить запрос</Button>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
         </TabItem>
     </TabControl>

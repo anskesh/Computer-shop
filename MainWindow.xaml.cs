@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.OleDb;
 using System.Linq;
@@ -50,13 +51,13 @@ namespace ComputerShop
         private ComboBox _cityComboBox;
 
         private Dictionary<string, TableData> _tables = new Dictionary<string, TableData>();
-        private Dictionary<string, string> _keysToTable;
+        private Dictionary<string, string> _keysToTables;
         
         public MainWindow()
         {
             InitializeComponent();
 
-            _keysToTable = new Dictionary<string, string>()
+            _keysToTables = new Dictionary<string, string>()
             {
                 {"ID Товара", "Товары"},
                 {"ID Клиента", "Клиенты"},
@@ -88,17 +89,30 @@ namespace ComputerShop
             }
             
             InitializeTablesInfo();
-            OnTableButtonClicked(ButtonsPanel.Children[0], null); // активация кнопки
+            OnTableButtonClicked(ButtonsPanel.Children[0]); // активация кнопки
+            OnSelectClicked(null, null);
         }
         
         private void InitializeTablesInfo()
         {
-            List<string> tableNames = new List<string>() { "Заказы", "Товары", "Категории товаров", "Спецификации", "Производители", "Страны", "Клиенты", "Сотрудники", "Поставки", "Склады", "Города", "Поставщики", "Акции"};
+            DataTable schemaTables = _oleDbConnection.GetSchema("Tables");
+            List<string> tableNames = new List<string>();
+
+            foreach (DataRow row in schemaTables.Rows)
+            {
+                string tableType = row["TABLE_TYPE"].ToString();
+                
+                if (tableType == "TABLE") // нужны только простые таблицы
+                {
+                    string tableName = row["TABLE_NAME"].ToString();
+                    tableNames.Add(tableName);
+                }
+            }
 
             foreach (var tableName in tableNames)
             {
-                DataTable schemaTable = _oleDbConnection.GetSchema("Columns", new[] {null, null, tableName, null});
-                var orderedColumns = schemaTable.AsEnumerable()
+                DataTable schemaColumns = _oleDbConnection.GetSchema("Columns", new[] {null, null, tableName, null});
+                var orderedColumns = schemaColumns.AsEnumerable()
                     .OrderBy(row => row.Field<long>("ORDINAL_POSITION"))
                     .Select(row => row["COLUMN_NAME"].ToString());
 
@@ -110,6 +124,15 @@ namespace ComputerShop
                 UpdateIDs(tableName);
             }
         }
+
+        private void UpdateQueryField(string tableName)
+        {
+            foreach (UIElement child in CheckboxPanel.Children)
+            {
+                if (child is CheckboxGroup checkboxGroup && _keysToTables[checkboxGroup.LabelID] == tableName)
+                    checkboxGroup.UpdateData(_tables[tableName]);
+            }
+        }
         
         private void OnWindowUnloaded(object sender, RoutedEventArgs e)
         {
@@ -119,7 +142,7 @@ namespace ComputerShop
 
         private List<string> GetForeignValues(string columnName)
         {
-            string tableName = _keysToTable[columnName];
+            string tableName = _keysToTables[columnName];
             return _tables[tableName].Values;
         }
 
@@ -128,7 +151,7 @@ namespace ComputerShop
             if (comboBoxIndex == -1) // пустое значение
                 return "NULL";
             
-            string tableName = _keysToTable[columnName];
+            string tableName = _keysToTables[columnName];
             return _tables[tableName].Ids[comboBoxIndex];
         }
         
@@ -238,6 +261,8 @@ namespace ComputerShop
                 _tables[tableName].Ids.Add(reader[0].ToString());
                 _tables[tableName].Values.Add(stringBuilder.ToString());
             }
+            
+            UpdateQueryField(tableName);
         }
 
         private Button _previousButton;
@@ -467,7 +492,7 @@ namespace ComputerShop
                     }
                     else if (child is LabeledComboBox labeledComboBox)
                     {
-                        string valueTableName = _keysToTable[labeledComboBox.OriginalLabel];
+                        string valueTableName = _keysToTables[labeledComboBox.OriginalLabel];
                         labeledComboBox.ComboBox.SelectedIndex = _tables[valueTableName].Ids.IndexOf(reader[i].ToString());;
                     }
                 }
@@ -504,13 +529,103 @@ namespace ComputerShop
             catch (Exception exception)
             {
                 MessageBox.Show($"Не удалось удалить запись. Проверьте, чтобы никакая другая таблица не ссылалась на первичный ключ удаляемой записи.", "Ошибка удаления", MessageBoxButton.OK, MessageBoxImage.Error);
-                Console.WriteLine(exception);
             }
         }
 
         private void OnCancelClick(object sender, RoutedEventArgs e)
         {
             TableTabControl.SelectedIndex = 0;
+        }
+
+        private void OnSelectClicked(object sender, RoutedEventArgs e)
+        {
+            string query = @"
+                    SELECT 
+                        Товары.[Название],
+                        [Категории товаров].Название AS Категория,
+                        Производители.[Название] AS Производители,
+                        Страны.[Страна],
+                        Клиенты.[Имя] AS [Имя клиента],
+                        Клиенты.[E-mail],
+                        Сотрудники.[Фамилия],
+                        Сотрудники.[Имя] AS [Имя сотрудника],
+                        Сотрудники.[Отчество],
+                        Склады.[Название] AS [Название склада],
+                        Города.[Город],
+                        Поставщики.[Название] AS [Название поставщика],
+                        Поставки.[Дата поставки],
+                        Акции.[Название] AS [Название акции],
+                        Заказы.[Количество],
+                        Заказы.[Дата покупки]
+                    FROM ((((((((((Заказы
+                        INNER JOIN Товары ON Заказы.[ID Товара] = Товары.[ID Товара])
+                        INNER JOIN [Категории товаров] ON Товары.[ID Категории] = [Категории товаров].[ID Категории])
+                        INNER JOIN Производители ON Товары.[ID Производителя] = Производители.[ID Производителя])
+                        INNER JOIN Страны ON Производители.[ID Страны] = Страны.[ID Страны])
+                        INNER JOIN Клиенты ON Заказы.[ID Клиента] = Клиенты.[ID Клиента])
+                        INNER JOIN Сотрудники ON Заказы.[ID Сотрудника] = Сотрудники.[ID Сотрудника])
+                        INNER JOIN Поставки ON Заказы.[ID Поставки] = Поставки.[ID Поставки])
+                        INNER JOIN Склады ON Поставки.[ID Склада] = Склады.[ID Склада])
+                        INNER JOIN Города ON Склады.[ID Города] = Города.[ID Города])
+                        INNER JOIN Поставщики ON Поставки.[ID Поставщика] = Поставщики.[ID Поставщика])
+                        LEFT JOIN Акции ON Заказы.[ID Акции] = Акции.[ID Акции]";
+
+            StringBuilder allQuery = new StringBuilder(query);
+            bool isChecked = false; // если хотя бы один отмечен
+            List<string> checkGroups = new List<string>();
+            
+            foreach (UIElement child in CheckboxPanel.Children)
+            {
+                if (child is CheckboxGroup checkboxGroup)
+                {
+                    List<string> checkboxes = new List<string>();
+
+                    for (int i = 0; i < checkboxGroup.CheckboxPanel.Children.Count; i++)
+                    {
+                        if (checkboxGroup.CheckboxPanel.Children[i] is CheckBox checkbox)
+                        {
+                            if (checkbox.IsChecked == true)
+                            {
+                                isChecked = true;
+                                string tableName = _keysToTables[checkboxGroup.LabelID];
+                                checkboxes.Add($"[{tableName}].[{checkboxGroup.LabelID}]={_tables[tableName].Ids[i]}");
+                            }
+                        }
+                    }
+                    if (checkboxes.Count > 1)
+                        checkGroups.Add($"({Strings.Join(checkboxes.ToArray(), " OR ")})");
+                    else if (checkboxes.Count == 1)
+                        checkGroups.Add($"{Strings.Join(checkboxes.ToArray(), " OR ")}");
+                }
+            }
+
+            if (isChecked)
+                allQuery.Append("\nWHERE ");
+
+            allQuery.Append($"{Strings.Join(checkGroups.ToArray(), "\nAND ")}");
+            var dataAdapter = new OleDbDataAdapter(allQuery.ToString(), _oleDbConnection);
+
+            var dataTable = new DataTable();
+            dataAdapter.Fill(dataTable);
+
+            QueryTable.ItemsSource = dataTable.DefaultView;
+        }
+
+        private void OnCancelQuery(object sender, RoutedEventArgs e)
+        {
+            foreach (UIElement child in CheckboxPanel.Children)
+            {
+                if (child is CheckboxGroup checkBoxGroup)
+                {
+                    foreach (var groupChild in checkBoxGroup.CheckboxPanel.Children)
+                    {
+                        if (groupChild is CheckBox checkBox)
+                            checkBox.IsChecked = false;
+                    }
+                }
+            }
+            
+            OnSelectClicked(null, null);
         }
     }
 }
