@@ -7,4 +7,15 @@
         <UseWPF>true</UseWPF>
     </PropertyGroup>
 
+    <ItemGroup>
+      <None Remove="ComputerShop.mdb" />
+      <Content Include="ComputerShop.mdb">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="System.Data.OleDb" Version="8.0.0" />
+    </ItemGroup>
+
 </Project>

@@ -4,9 +4,107 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ComputerShop"
+        xmlns:customControl="clr-namespace:ComputerShop.CustomControl"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="550" Width="1000"
+        Loaded="OnWindowLoaded"
+        Unloaded="OnWindowUnloaded">
+    <Window.Resources>
+        <Style x:Key="BtnStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10, 5" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Background" Value="LightGray"></Setter>
+            <EventSetter Event="Click" Handler="OnTableButtonClicked" />
+        </Style>
+    </Window.Resources>
     <Grid>
-
+    <TabControl>
+        <TabItem Header="Редактор таблиц">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"></ColumnDefinition>
+                    <ColumnDefinition Width="10*"></ColumnDefinition>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel x:Name="ButtonsPanel">
+                    <Button Style="{StaticResource BtnStyle}">Заказы</Button>
+                    <Button Style="{StaticResource BtnStyle}">Товары</Button>
+                    <Button Style="{StaticResource BtnStyle}">Категории товаров</Button>
+                    <Button Style="{StaticResource BtnStyle}">Спецификации</Button>
+                    <Button Style="{StaticResource BtnStyle}">Производители</Button>
+                    <Button Style="{StaticResource BtnStyle}">Страны</Button>
+                    <Button Style="{StaticResource BtnStyle}">Клиенты</Button>
+                    <Button Style="{StaticResource BtnStyle}">Сотрудники</Button>
+                    <Button Style="{StaticResource BtnStyle}">Поставки</Button>
+                    <Button Style="{StaticResource BtnStyle}">Склады</Button>
+                    <Button Style="{StaticResource BtnStyle}">Города</Button>
+                    <Button Style="{StaticResource BtnStyle}">Поставщики</Button>
+                    <Button Style="{StaticResource BtnStyle}">Акции</Button>
+                </StackPanel>
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"></RowDefinition>
+                        <RowDefinition></RowDefinition>
+                    </Grid.RowDefinitions>
+                    
+                    <Label x:Name="SelectedTableLabel">Заказы</Label>
+                    <TabControl Grid.Row="1" x:Name="TableTabControl">
+                        <TabItem Header="Просмотр">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"></RowDefinition>
+                                    <RowDefinition Height="Auto"></RowDefinition>
+                                </Grid.RowDefinitions>
+                                
+                                <DataGrid x:Name="EditableGrid" SelectionMode="Single" IsReadOnly="True"></DataGrid>
+                                <StackPanel Grid.Row="1" Orientation="Horizontal">
+                                    <Button Margin="5" Padding="15 5" Click="OnAddClick">Добавить</Button>
+                                    <Button Margin="5" Padding="15 5" Click="OnEditClick">Изменить</Button>
+                                    <Button Margin="5" Padding="15 5" Click="OnRemoveClick">Удалить</Button>
+                                </StackPanel>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Добавление">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"></RowDefinition>
+                                    <RowDefinition Height="Auto"></RowDefinition>
+                                </Grid.RowDefinitions>
+                                
+                                <ScrollViewer>
+                                    <StackPanel x:Name="AddStackPanel" HorizontalAlignment="Left"/>
+                                </ScrollViewer>
+                                <StackPanel Grid.Row="1" Orientation="Horizontal">
+                                    <Button Margin="5" Padding="15 5" Click="OnAddClick">Добавить</Button>
+                                    <Button Margin="5" Padding="15 5" Click="OnCancelClick">Отменить</Button>
+                                </StackPanel>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Изменение" PreviewMouseDown="OnEditTabClicked">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"></RowDefinition>
+                                    <RowDefinition Height="Auto"></RowDefinition>
+                                </Grid.RowDefinitions>
+                                
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel x:Name="EditStackPanel" HorizontalAlignment="Left"></StackPanel>
+                                </ScrollViewer>
+                                <StackPanel Grid.Row="1" Orientation="Horizontal">
+                                    <Button Margin="5" Padding="15 5" Click="OnEditClick">Изменить</Button>
+                                    <Button Margin="5" Padding="15 5" Click="OnCancelClick">Отменить</Button>
+                                </StackPanel>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </Grid>
+        </TabItem>
+        <TabItem Header="Запросы">
+            <Grid>
+                <DataGrid x:Name="QueryTable"></DataGrid>
+            </Grid>
+        </TabItem>
+    </TabControl>
     </Grid>
 </Window>
