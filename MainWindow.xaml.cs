@@ -1,20 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.OleDb;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using ComputerShop.CustomControl;
 using Microsoft.VisualBasic;
 
@@ -25,39 +19,17 @@ namespace ComputerShop
     /// </summary>
     public partial class MainWindow : Window
     {
-        private String _connectionString;
         private OleDbConnection _oleDbConnection;
-        private OleDbDataAdapter _dataAdapter;
-        private DataTable _dataTable;
+        private Button _previousButton;
 
-        // Orders
-        private ComboBox _productComboBox;
-        private ComboBox _clientComboBox;
-        private ComboBox _employeeComboBox;
-        private ComboBox _deliveryComboBox;
-        private ComboBox _offerComboBox;
-        
-        // Products
-        private ComboBox _categoryComboBox;
-        private ComboBox _specificationComboBox;
-        private ComboBox _manufacterComboBox;
-        
-        // Deliveries
-        private ComboBox _supplierComboBox;
-        private ComboBox _storageComboBox;
-        
-        // Other
-        private ComboBox _countryComboBox;
-        private ComboBox _cityComboBox;
-
-        private Dictionary<string, TableData> _tables = new Dictionary<string, TableData>();
+        private Dictionary<string, TableData> _tables = new();
         private Dictionary<string, string> _keysToTables;
-        
+
         public MainWindow()
         {
             InitializeComponent();
 
-            _keysToTables = new Dictionary<string, string>()
+            _keysToTables = new Dictionary<string, string>() // создание ассоциайций внешних ключей с таблицами
             {
                 {"ID Товара", "Товары"},
                 {"ID Клиента", "Клиенты"},
@@ -76,40 +48,46 @@ namespace ComputerShop
 
         private void OnWindowLoaded(object sender, RoutedEventArgs e)
         {
-            _connectionString = Environment.Is64BitOperatingSystem ? "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=ComputerShop.mdb" : "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=ComputerShop.mdb";
-            
+            string connectionString = Environment.Is64BitOperatingSystem
+                ? "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=ComputerShop.mdb"
+                : "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=ComputerShop.mdb";
+
             try
             {
-                _oleDbConnection = new OleDbConnection(_connectionString);
+                _oleDbConnection = new OleDbConnection(connectionString);
                 _oleDbConnection.Open();
             }
             catch (Exception exception)
             {
                 MessageBox.Show("Не удалось подключиться к базе данных!");
             }
-            
+
             InitializeTablesInfo();
-            OnTableButtonClicked(ButtonsPanel.Children[0]); // активация кнопки
-            OnSelectClicked(null, null);
+            ChangeTable(ButtonsPanel.Children[0]); // активация кнопки
+            ExecuteQuery(null, null);
         }
-        
+
+        private void OnWindowUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (_oleDbConnection != null && _oleDbConnection.State != ConnectionState.Closed)
+                _oleDbConnection.Close();
+        }
+
         private void InitializeTablesInfo()
         {
             DataTable schemaTables = _oleDbConnection.GetSchema("Tables");
-            List<string> tableNames = new List<string>();
+            var tableNames = new List<string>();
 
             foreach (DataRow row in schemaTables.Rows)
             {
                 string tableType = row["TABLE_TYPE"].ToString();
+                if (tableType != "TABLE") continue; // нужны только простые таблицы
                 
-                if (tableType == "TABLE") // нужны только простые таблицы
-                {
-                    string tableName = row["TABLE_NAME"].ToString();
-                    tableNames.Add(tableName);
-                }
+                string tableName = row["TABLE_NAME"].ToString();
+                tableNames.Add(tableName);
             }
 
-            foreach (var tableName in tableNames)
+            foreach (string tableName in tableNames)
             {
                 DataTable schemaColumns = _oleDbConnection.GetSchema("Columns", new[] {null, null, tableName, null});
                 var orderedColumns = schemaColumns.AsEnumerable()
@@ -120,70 +98,13 @@ namespace ComputerShop
                 {
                     Fields = orderedColumns.ToList()
                 });
-                
-                UpdateIDs(tableName);
+
+                UpdateForeignIDs(tableName);
             }
         }
 
-        private void UpdateQueryField(string tableName)
+        private void UpdateForeignIDs(string tableName)
         {
-            foreach (UIElement child in CheckboxPanel.Children)
-            {
-                if (child is CheckboxGroup checkboxGroup && _keysToTables[checkboxGroup.LabelID] == tableName)
-                    checkboxGroup.UpdateData(_tables[tableName]);
-            }
-        }
-        
-        private void OnWindowUnloaded(object sender, RoutedEventArgs e)
-        {
-            if (_oleDbConnection != null && _oleDbConnection.State != ConnectionState.Closed)
-                _oleDbConnection.Close();
-        }
-
-        private List<string> GetForeignValues(string columnName)
-        {
-            string tableName = _keysToTables[columnName];
-            return _tables[tableName].Values;
-        }
-
-        private string GetForeignIndex(string columnName, int comboBoxIndex)
-        {
-            if (comboBoxIndex == -1) // пустое значение
-                return "NULL";
-            
-            string tableName = _keysToTables[columnName];
-            return _tables[tableName].Ids[comboBoxIndex];
-        }
-        
-        private void InitializeTableInfo(string tableName)
-        {
-            AddStackPanel.Children.Clear();
-            EditStackPanel.Children.Clear();
-
-            for (int i = 0; i < _tables[tableName].Fields.Count; i++)
-            {
-                if (i == 0) // нельзя поменять или установить первичный ключ
-                    continue;
-                
-                var column = _tables[tableName].Fields[i];
-                if (column.Contains("ID"))
-                {
-                    AddStackPanel.Children.Add(new LabeledComboBox(column, GetForeignValues(column)));
-                    EditStackPanel.Children.Add(new LabeledComboBox(column, GetForeignValues(column)));
-                }
-                else
-                {
-                    AddStackPanel.Children.Add(new LabeledField(column));
-                    EditStackPanel.Children.Add(new LabeledField(column));
-                }
-            }
-        }
-
-        private void UpdateIDs(string tableName, bool needUpdate = true)
-        {
-            if (!needUpdate && _tables[tableName].Values.Count > 0) // данные уже загружены
-                return;
-            
             string query;
 
             switch (tableName)
@@ -197,11 +118,13 @@ namespace ComputerShop
                                 FROM Клиенты";
                     break;
                 case "Сотрудники":
-                    query = @"SELECT Сотрудники.[ID Сотрудника], Сотрудники.[Фамилия], Сотрудники.[Имя], Сотрудники.[Отчество]
+                    query =
+                        @"SELECT Сотрудники.[ID Сотрудника], Сотрудники.[Фамилия], Сотрудники.[Имя], Сотрудники.[Отчество]
                                 FROM Сотрудники";
                     break;
                 case "Поставки":
-                    query = @"SELECT Поставки.[ID Поставки], Склады.[Название], Города.[Город], Поставщики.[Название], Поставки.[Дата поставки]
+                    query =
+                        @"SELECT Поставки.[ID Поставки], Склады.[Название], Города.[Город], Поставщики.[Название], Поставки.[Дата поставки]
                                 FROM ((Поставки
                                 INNER JOIN Склады ON Поставки.[ID Склада] = Склады.[ID Склада])
                                 INNER JOIN Города ON Склады.[ID Города] = Города.[ID Города])
@@ -246,43 +169,45 @@ namespace ComputerShop
 
             _tables[tableName].Values.Clear();
             _tables[tableName].Ids.Clear();
-            
-            OleDbCommand command = new OleDbCommand(query, _oleDbConnection);
+
+            var command = new OleDbCommand(query, _oleDbConnection);
             OleDbDataReader reader = command.ExecuteReader();
-            StringBuilder stringBuilder = new StringBuilder();
-            
+            var stringBuilder = new StringBuilder();
+
             while (reader.Read())
             {
                 stringBuilder.Clear();
-                
+
                 for (int i = 1; i < reader.FieldCount; i++) // 0 - индекс
                     stringBuilder.Append(reader[i] + " ");
-                
+
                 _tables[tableName].Ids.Add(reader[0].ToString());
                 _tables[tableName].Values.Add(stringBuilder.ToString());
             }
-            
+
             UpdateQueryField(tableName);
         }
 
-        private Button _previousButton;
-        
-        private void OnTableButtonClicked(object sender, RoutedEventArgs e = null)
+        private void UpdateQueryField(string tableName)
         {
-            if (sender is not Button button)
-                return;
+            foreach (CheckboxGroup checkboxGroup in CheckboxPanel.Children)
+            {
+                if (_keysToTables[checkboxGroup.LabelID] == tableName)
+                {
+                    checkboxGroup.UpdateData(_tables[tableName]);
+                    return;
+                }
+            }
+        }
 
-            if (_previousButton != null)
-                _previousButton.Background = new SolidColorBrush(Colors.LightGray);
-
-            TableTabControl.SelectedIndex = 0;
-            SelectedTableLabel.Content = button.Content;
-            button.Background = new SolidColorBrush(Colors.DarkGray);
-            _previousButton = button;
+        private void ChangeTable(object sender, RoutedEventArgs e = null)
+        {
+            Button button = sender as Button;
+            ChangeButton(button);
 
             string query;
             string tableName = button.Content.ToString();
-            
+
             InitializeTableInfo(tableName);
 
             switch (tableName)
@@ -357,16 +282,66 @@ namespace ComputerShop
                     query = $"SELECT * FROM [{button.Content}]";
                     break;
             }
-            
-            _dataAdapter = new OleDbDataAdapter(query, _oleDbConnection);
 
-            _dataTable = new DataTable();
-            _dataAdapter.Fill(_dataTable);
+            var dataAdapter = new OleDbDataAdapter(query, _oleDbConnection);
+            var dataTable = new DataTable();
+            dataAdapter.Fill(dataTable);
 
-            EditableGrid.ItemsSource = _dataTable.DefaultView;
+            EditableGrid.ItemsSource = dataTable.DefaultView;
         }
 
-        private void OnAddClick(object sender, RoutedEventArgs e)
+        private void ChangeButton(Button newButton)
+        {
+            if (_previousButton != null)
+                _previousButton.Background = new SolidColorBrush(Colors.LightGray);
+
+            TableTabControl.SelectedIndex = 0;
+            SelectedTableLabel.Content = newButton.Content;
+            newButton.Background = new SolidColorBrush(Colors.DarkGray);
+            _previousButton = newButton;
+        }
+
+        private void InitializeTableInfo(string tableName)
+        {
+            AddStackPanel.Children.Clear();
+            EditStackPanel.Children.Clear();
+
+            for (int i = 0; i < _tables[tableName].Fields.Count; i++)
+            {
+                if (i == 0) continue; // нельзя поменять или установить первичный ключ
+                string column = _tables[tableName].Fields[i];
+
+                if (column.Contains("ID"))
+                {
+                    AddStackPanel.Children.Add(new LabeledComboBox(column, GetForeignValues(column)));
+                    EditStackPanel.Children.Add(new LabeledComboBox(column, GetForeignValues(column)));
+                }
+                else
+                {
+                    AddStackPanel.Children.Add(new LabeledField(column));
+                    EditStackPanel.Children.Add(new LabeledField(column));
+                }
+            }
+        }
+
+        private List<string> GetForeignValues(string columnName)
+        {
+            string tableName = _keysToTables[columnName];
+            return _tables[tableName].Values;
+        }
+
+        #region EditingData
+
+        private string GetForeignIndex(string columnName, int comboBoxIndex)
+        {
+            if (comboBoxIndex == -1) // пустое значение
+                return "NULL";
+
+            string tableName = _keysToTables[columnName];
+            return _tables[tableName].Ids[comboBoxIndex];
+        }
+
+        private void AddRecord(object sender, RoutedEventArgs e)
         {
             if (TableTabControl.SelectedIndex != 1)
             {
@@ -374,62 +349,62 @@ namespace ComputerShop
                 return;
             }
 
-            List<string> values = new List<string>() ;
+            var values = new List<string>();
             string tableName = _previousButton.Content.ToString();
-            
+
             foreach (var child in AddStackPanel.Children)
             {
-                if (child is LabeledField labeledField)
+                switch (child)
                 {
-                    values.Add(labeledField.GetText());
-                }
-                else if (child is LabeledComboBox labeledComboBox)
-                {
-                    values.Add(GetForeignIndex(labeledComboBox.OriginalLabel, labeledComboBox.ComboBox.SelectedIndex));
+                    case LabeledField labeledField:
+                        values.Add(labeledField.GetText());
+                        break;
+                    case LabeledComboBox labeledComboBox:
+                        values.Add(GetForeignIndex(labeledComboBox.OriginalLabel, labeledComboBox.ComboBox.SelectedIndex));
+                        break;
                 }
             }
 
-            StringBuilder query = new StringBuilder();
+            var query = new StringBuilder();
             query.Append($"INSERT INTO [{tableName}] ");
             query.Append($"({_tables[tableName].GetFields()}) VALUES ");
             query.Append($"({Strings.Join(values.ToArray(), ", ")})");
-            
+
             try
             {
-                OleDbCommand command = new OleDbCommand(query.ToString(), _oleDbConnection);
+                var command = new OleDbCommand(query.ToString(), _oleDbConnection);
                 command.ExecuteNonQuery();
-                
-                OnTableButtonClicked(_previousButton); // активация кнопки
-                UpdateIDs(tableName);
+
+                ChangeTable(_previousButton); // активация кнопки
+                UpdateForeignIDs(tableName);
             }
             catch (Exception exception)
             {
-                MessageBox.Show($"Не удалось добавить запись, заполните поля корректными значениями.", "Ошибка добавления", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Не удалось добавить запись, заполните поля корректными значениями.",
+                    "Ошибка добавления", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private string _lastEditIndex;
-        
         private void OnEditTabClicked(object sender, MouseButtonEventArgs e)
         {
-            FillEditData();
+            FillEditingRecord();
         }
-        
-        private void OnEditClick(object sender, RoutedEventArgs e)
+
+        private void EditRecord(object sender, RoutedEventArgs e)
         {
             if (TableTabControl.SelectedIndex != 2)
             {
-                FillEditData();
+                FillEditingRecord();
                 return;
             }
-            
-            if (_lastEditIndex == null)
+
+            if (EditableGrid.SelectedIndex == -1)
                 return;
-            
-            List<string> values = new List<string>() ;
+
+            var values = new List<string>();
             string tableName = SelectedTableLabel.Content.ToString();
-            
-            foreach (var child in EditStackPanel.Children)
+
+            foreach (UIElement child in EditStackPanel.Children)
             {
                 if (child is LabeledField labeledField)
                 {
@@ -441,43 +416,49 @@ namespace ComputerShop
                 }
             }
 
-            StringBuilder updateQuery = new StringBuilder();
+            var updateQuery = new StringBuilder();
             updateQuery.Append($"UPDATE [{tableName}] SET ");
             updateQuery.Append($"{Strings.Join(values.ToArray(), ", ")}");
-            updateQuery.Append($" WHERE [{EditableGrid.Columns[0].Header}]={_lastEditIndex}");
-            
+            updateQuery.Append($" WHERE [{EditableGrid.Columns[0].Header}]={_selectedIndex}");
+
             try
             {
-                OleDbCommand command = new OleDbCommand(updateQuery.ToString(), _oleDbConnection);
+                var command = new OleDbCommand(updateQuery.ToString(), _oleDbConnection);
                 command.ExecuteNonQuery();
-                
-                OnTableButtonClicked(_previousButton);
-                UpdateIDs(tableName);
+
+                ChangeTable(_previousButton);
+                UpdateForeignIDs(tableName);
             }
             catch (Exception exception)
             {
-                MessageBox.Show($"Не удалось изменить значения. Введите корректные данные.", "Ошибка изменения", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Не удалось изменить значения. Введите корректные данные.", "Ошибка изменения",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void FillEditData()
+        private string _selectedIndex;
+        
+        private void FillEditingRecord()
         {
+            if (TableTabControl.SelectedIndex == 2) // если уже находимся в этой вкладке, значит выбрали
+                return;
+                
             if (EditableGrid.SelectedIndex == -1)
             {
-                MessageBox.Show("Сначала необходимо выбрать запись для изменения.", "Ошибка изменения", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Сначала необходимо выбрать запись для изменения.", "Ошибка изменения",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-                
+
             var selectedItem = EditableGrid.SelectedCells[0].Column.GetCellContent(EditableGrid.SelectedItem) as TextBlock;
+            _selectedIndex = selectedItem.Text;
             TableTabControl.SelectedIndex = 2;
 
-            _lastEditIndex = selectedItem.Text;
-                
             string query = @$"SELECT * 
                                     FROM [{SelectedTableLabel.Content}] 
-                                    WHERE [{EditableGrid.Columns[0].Header}] = {selectedItem.Text}";
+                                    WHERE [{EditableGrid.Columns[0].Header}] = {_selectedIndex}";
 
-            OleDbCommand command = new OleDbCommand(query, _oleDbConnection);
+            var command = new OleDbCommand(query, _oleDbConnection);
             OleDbDataReader reader = command.ExecuteReader();
 
             while (reader.Read())
@@ -485,59 +466,70 @@ namespace ComputerShop
                 for (int i = 1; i < reader.FieldCount; i++)
                 {
                     UIElement child = EditStackPanel.Children[i - 1];
-                        
-                    if (child is LabeledField labeledField)
+
+                    switch (child)
                     {
-                        labeledField.Text = reader[i].ToString();
-                    }
-                    else if (child is LabeledComboBox labeledComboBox)
-                    {
-                        string valueTableName = _keysToTables[labeledComboBox.OriginalLabel];
-                        labeledComboBox.ComboBox.SelectedIndex = _tables[valueTableName].Ids.IndexOf(reader[i].ToString());;
+                        case LabeledField labeledField:
+                            labeledField.Text = reader[i].ToString();
+                            break;
+                        case LabeledComboBox labeledComboBox:
+                        {
+                            string valueTableName = _keysToTables[labeledComboBox.OriginalLabel];
+                            labeledComboBox.ComboBox.SelectedIndex = _tables[valueTableName].Ids.IndexOf(reader[i].ToString());
+                            break;
+                        }
                     }
                 }
             }
         }
 
-        private void OnRemoveClick(object sender, RoutedEventArgs e)
+        private void RemoveRecord(object sender, RoutedEventArgs e)
         {
             if (EditableGrid.SelectedIndex == -1)
             {
-                MessageBox.Show("Необходимо выбрать запись для удаления.", "Ошибка удаления", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Необходимо выбрать запись для удаления.", "Ошибка удаления", MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
-            MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить выбранную запись?", "Предупреждение",
+            MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить выбранную запись?",
+                "Предупреждение",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
 
             if (result == MessageBoxResult.No)
                 return;
-            
-            var selectedItem = EditableGrid.SelectedCells[0].Column.GetCellContent(EditableGrid.SelectedItem) as TextBlock;
 
-            string query = @$"DELETE FROM [{SelectedTableLabel.Content}]
+            string tableName = SelectedTableLabel.Content.ToString();
+            var selectedItem = EditableGrid.SelectedCells[0].Column.GetCellContent(EditableGrid.SelectedItem) as TextBlock;
+            string query = @$"DELETE FROM [{tableName}]
                                 WHERE [{EditableGrid.Columns[0].Header}]={selectedItem.Text}";
-            
+
             try
             {
-                OleDbCommand command = new OleDbCommand(query, _oleDbConnection);
+                var command = new OleDbCommand(query, _oleDbConnection);
                 command.ExecuteNonQuery();
-                
-                OnTableButtonClicked(_previousButton);
-                UpdateIDs(SelectedTableLabel.Content.ToString());
+
+                ChangeTable(_previousButton);
+                UpdateForeignIDs(tableName);
             }
             catch (Exception exception)
             {
-                MessageBox.Show($"Не удалось удалить запись. Проверьте, чтобы никакая другая таблица не ссылалась на первичный ключ удаляемой записи.", "Ошибка удаления", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Не удалось удалить запись. Проверьте, чтобы никакая другая таблица не ссылалась на первичный ключ удаляемой записи.",
+                    "Ошибка удаления", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void OnCancelClick(object sender, RoutedEventArgs e)
+        private void CancelEditingRecord(object sender, RoutedEventArgs e)
         {
             TableTabControl.SelectedIndex = 0;
         }
 
-        private void OnSelectClicked(object sender, RoutedEventArgs e)
+        #endregion
+
+        #region QueryTab
+
+        private void ExecuteQuery(object sender, RoutedEventArgs e)
         {
             string query = @"
                     SELECT 
@@ -570,62 +562,59 @@ namespace ComputerShop
                         INNER JOIN Поставщики ON Поставки.[ID Поставщика] = Поставщики.[ID Поставщика])
                         LEFT JOIN Акции ON Заказы.[ID Акции] = Акции.[ID Акции]";
 
-            StringBuilder allQuery = new StringBuilder(query);
-            bool isChecked = false; // если хотя бы один отмечен
-            List<string> checkGroups = new List<string>();
-            
-            foreach (UIElement child in CheckboxPanel.Children)
-            {
-                if (child is CheckboxGroup checkboxGroup)
-                {
-                    List<string> checkboxes = new List<string>();
+            var allQuery = new StringBuilder(query);
+            var checkGroups = new List<string>(); // список групп
+            var checkboxes = new List<string>(); // список всех отмеченных значений
+            bool isChecked = false; // если ни один не отмечен - не редактируем запрос
 
-                    for (int i = 0; i < checkboxGroup.CheckboxPanel.Children.Count; i++)
-                    {
-                        if (checkboxGroup.CheckboxPanel.Children[i] is CheckBox checkbox)
-                        {
-                            if (checkbox.IsChecked == true)
-                            {
-                                isChecked = true;
-                                string tableName = _keysToTables[checkboxGroup.LabelID];
-                                checkboxes.Add($"[{tableName}].[{checkboxGroup.LabelID}]={_tables[tableName].Ids[i]}");
-                            }
-                        }
-                    }
-                    if (checkboxes.Count > 1)
+            foreach (CheckboxGroup checkboxGroup in CheckboxPanel.Children)
+            {
+                checkboxes.Clear();
+
+                for (int i = 0; i < checkboxGroup.CheckboxPanel.Children.Count; i++)
+                {
+                    if (checkboxGroup.CheckboxPanel.Children[i] is not CheckBox checkbox) continue;
+                    if (checkbox.IsChecked != true) continue;
+
+                    isChecked = true;
+                    string tableName = _keysToTables[checkboxGroup.LabelID];
+                    checkboxes.Add($"[{tableName}].[{checkboxGroup.LabelID}]={_tables[tableName].Ids[i]}");
+                }
+
+                switch (checkboxes.Count)
+                {
+                    case > 1:
                         checkGroups.Add($"({Strings.Join(checkboxes.ToArray(), " OR ")})");
-                    else if (checkboxes.Count == 1)
+                        break;
+                    case 1:
                         checkGroups.Add($"{Strings.Join(checkboxes.ToArray(), " OR ")}");
+                        break;
                 }
             }
 
-            if (isChecked)
-                allQuery.Append("\nWHERE ");
-
+            if (isChecked) allQuery.Append("\nWHERE ");
             allQuery.Append($"{Strings.Join(checkGroups.ToArray(), "\nAND ")}");
+
             var dataAdapter = new OleDbDataAdapter(allQuery.ToString(), _oleDbConnection);
-
             var dataTable = new DataTable();
-            dataAdapter.Fill(dataTable);
 
+            dataAdapter.Fill(dataTable);
             QueryTable.ItemsSource = dataTable.DefaultView;
         }
 
-        private void OnCancelQuery(object sender, RoutedEventArgs e)
+        private void ResetQuery(object sender, RoutedEventArgs e)
         {
             foreach (UIElement child in CheckboxPanel.Children)
             {
-                if (child is CheckboxGroup checkBoxGroup)
-                {
-                    foreach (var groupChild in checkBoxGroup.CheckboxPanel.Children)
-                    {
-                        if (groupChild is CheckBox checkBox)
-                            checkBox.IsChecked = false;
-                    }
-                }
+                if (child is not CheckboxGroup checkBoxGroup) continue;
+
+                foreach (CheckBox checkBox in checkBoxGroup.CheckboxPanel.Children)
+                    checkBox.IsChecked = false;
             }
-            
-            OnSelectClicked(null, null);
+
+            ExecuteQuery(null, null); // вызываем обновление таблицы по новому запросу
         }
+
+        #endregion
     }
 }
