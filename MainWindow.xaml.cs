@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.OleDb;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -10,7 +9,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ComputerShop.CustomControl;
-using Microsoft.VisualBasic;
 
 namespace ComputerShop
 {
@@ -59,7 +57,7 @@ namespace ComputerShop
             }
             catch (Exception exception)
             {
-                MessageBox.Show("Не удалось подключиться к базе данных!");
+                MessageBox.Show("Не удалось подключиться к базе данных!", "Ошибка подключения", MessageBoxButton.OK, MessageBoxImage.Error);
             }
 
             InitializeTablesInfo();
@@ -124,7 +122,7 @@ namespace ComputerShop
                     break;
                 case "Поставки":
                     query =
-                        @"SELECT Поставки.[ID Поставки], Склады.[Название], Города.[Город], Поставщики.[Название], Поставки.[Дата поставки]
+                        @"SELECT Поставки.[ID Поставки], Склады.[Название], Города.[Город], Поставщики.[Название], FORMAT(Поставки.[Дата поставки], 'dd.mm.yyyy')
                                 FROM ((Поставки
                                 INNER JOIN Склады ON Поставки.[ID Склада] = Склады.[ID Склада])
                                 INNER JOIN Города ON Склады.[ID Города] = Города.[ID Города])
@@ -144,7 +142,7 @@ namespace ComputerShop
                                 FROM Города";
                     break;
                 case "Акции":
-                    query = @"SELECT Акции.[ID Акции], Акции.[Название], 'До ' & Акции.[Дата конца]
+                    query = @"SELECT Акции.[ID Акции], Акции.[Название], 'До ' & FORMAT(Акции.[Дата конца], 'dd.mm.yyyy')
                                 FROM Акции";
                     break;
                 case "Категории товаров":
@@ -219,10 +217,10 @@ namespace ComputerShop
                         Товары.[Название] AS Товар,
                         Клиенты.[Имя] AS Клиент,
                         Сотрудники.[Фамилия] & ' ' & Сотрудники.[Имя] & ' ' & Сотрудники.[Отчество] AS Сотрудник,
-                        Склады.[Название] & ' ' & Поставщики.[Название] & ' ' & Поставки.[Дата поставки] AS Поставщик,
+                        Склады.[Название] & ' ' & Поставщики.[Название] & ' ' & FORMAT(Поставки.[Дата поставки], 'dd.mm.yyyy') AS Поставщик,
                         Акции.[Название] AS Акция,
                         Количество,
-                        [Дата покупки]
+                        FORMAT([Дата покупки], 'dd.mm.yyyy') AS [Дата покупки]
                     FROM ((((((Заказы
                     INNER JOIN Товары ON Заказы.[ID Товара] = Товары.[ID Товара])
                     INNER JOIN Клиенты ON Заказы.[ID Клиента] = Клиенты.[ID Клиента])
@@ -263,7 +261,7 @@ namespace ComputerShop
                         Поставки.[ID Поставки],
                         Склады.[Название] & ' ' & Города.[Город] AS Склад,
                         Поставщики.[Название] AS Поставщик,
-                        Поставки.[Дата поставки]
+                        FORMAT(Поставки.[Дата поставки], 'dd.mm.yyyy') AS [Дата поставки]
                     FROM (((Поставки
                     INNER JOIN Склады ON Поставки.[ID Склада] = Склады.[ID Склада])
                     INNER JOIN Города ON Склады.[ID Города] = Города.[ID Города])
@@ -277,6 +275,16 @@ namespace ComputerShop
                         Города.[Город] AS Город
                     FROM (Склады
                     INNER JOIN Города ON Склады.[ID Города] = Города.[ID Города]);";
+                    break;
+                case "Акции":
+                    query = @"
+                            SELECT Акции.[ID Акции],
+                                [Название],
+                                [Описание],
+                                [Скидка],
+                                FORMAT([Дата начала], 'dd.mm.yyyy') AS [Дата начала],
+                                FORMAT([Дата конца], 'dd.mm.yyyy') AS [Дата конца]
+                            FROM Акции";
                     break;
                 default:
                     query = $"SELECT * FROM [{button.Content}]";
@@ -368,7 +376,7 @@ namespace ComputerShop
             var query = new StringBuilder();
             query.Append($"INSERT INTO [{tableName}] ");
             query.Append($"({_tables[tableName].GetFields()}) VALUES ");
-            query.Append($"({Strings.Join(values.ToArray(), ", ")})");
+            query.Append($"({String.Join(", ", values.ToArray())})");
 
             try
             {
@@ -406,19 +414,20 @@ namespace ComputerShop
 
             foreach (UIElement child in EditStackPanel.Children)
             {
-                if (child is LabeledField labeledField)
+                switch (child)
                 {
-                    values.Add($"[{labeledField.OriginalLabel}]={labeledField.GetText()}");
-                }
-                else if (child is LabeledComboBox labeledComboBox)
-                {
-                    values.Add($"[{labeledComboBox.OriginalLabel}]={GetForeignIndex(labeledComboBox.OriginalLabel, labeledComboBox.ComboBox.SelectedIndex)}");
+                    case LabeledField labeledField:
+                        values.Add($"[{labeledField.OriginalLabel}]={labeledField.GetText()}");
+                        break;
+                    case LabeledComboBox labeledComboBox:
+                        values.Add($"[{labeledComboBox.OriginalLabel}]={GetForeignIndex(labeledComboBox.OriginalLabel, labeledComboBox.ComboBox.SelectedIndex)}");
+                        break;
                 }
             }
 
             var updateQuery = new StringBuilder();
             updateQuery.Append($"UPDATE [{tableName}] SET ");
-            updateQuery.Append($"{Strings.Join(values.ToArray(), ", ")}");
+            updateQuery.Append($"{String.Join(", ", values)}");
             updateQuery.Append($" WHERE [{EditableGrid.Columns[0].Header}]={_selectedIndex}");
 
             try
@@ -532,7 +541,8 @@ namespace ComputerShop
         private void ExecuteQuery(object sender, RoutedEventArgs e)
         {
             string query = @"
-                    SELECT 
+                    SELECT
+                        [ID Заказа],
                         Товары.[Название],
                         [Категории товаров].Название AS Категория,
                         Производители.[Название] AS Производители,
@@ -545,10 +555,10 @@ namespace ComputerShop
                         Склады.[Название] AS [Название склада],
                         Города.[Город],
                         Поставщики.[Название] AS [Название поставщика],
-                        Поставки.[Дата поставки],
+                        FORMAT(Поставки.[Дата поставки], 'dd.mm.yyyy') AS [Дата поставки],
                         Акции.[Название] AS [Название акции],
                         Заказы.[Количество],
-                        Заказы.[Дата покупки]
+                        FORMAT([Дата покупки], 'dd.mm.yyyy') AS [Дата покупки]
                     FROM ((((((((((Заказы
                         INNER JOIN Товары ON Заказы.[ID Товара] = Товары.[ID Товара])
                         INNER JOIN [Категории товаров] ON Товары.[ID Категории] = [Категории товаров].[ID Категории])
@@ -584,16 +594,16 @@ namespace ComputerShop
                 switch (checkboxes.Count)
                 {
                     case > 1:
-                        checkGroups.Add($"({Strings.Join(checkboxes.ToArray(), " OR ")})");
+                        checkGroups.Add($"({String.Join(" OR ", checkboxes.ToArray())})");
                         break;
                     case 1:
-                        checkGroups.Add($"{Strings.Join(checkboxes.ToArray(), " OR ")}");
+                        checkGroups.Add($"{String.Join(" OR ", checkboxes.ToArray())}");
                         break;
                 }
             }
 
             if (isChecked) allQuery.Append("\nWHERE ");
-            allQuery.Append($"{Strings.Join(checkGroups.ToArray(), "\nAND ")}");
+            allQuery.Append($"{String.Join( "\nAND ", checkGroups.ToArray())}");
 
             var dataAdapter = new OleDbDataAdapter(allQuery.ToString(), _oleDbConnection);
             var dataTable = new DataTable();

@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using Microsoft.VisualBasic;
 
 namespace ComputerShop;
 
@@ -16,6 +15,6 @@ public class TableData
         foreach (var field in Fields)
             fields.Add($"[{field}]");
 
-        return Strings.Join(fields.GetRange(1, fields.Count - 1).ToArray(), ", ");
+        return string.Join(", ", fields.GetRange(1, fields.Count - 1));
     }
 }

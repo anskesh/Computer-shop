@@ -18,6 +18,7 @@ public partial class LabeledField : UserControl
     {
         OriginalLabel = label;
         Label = label + ":";
+        
         Text = text;
     }
 
@@ -32,7 +33,11 @@ public partial class LabeledField : UserControl
     public string Text
     {
         get => (string) GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
+        set
+        {
+            var newValue = !Label.Contains("Дата") ? value : value.Split(' ')[0];
+            SetValue(TextProperty, newValue);
+        }
     }
 
     private List<string> _nonStringKeys = new()
@@ -45,6 +50,6 @@ public partial class LabeledField : UserControl
             return Text;
         }
         
-        return new string($"\"{Text}\"");
+        return $"\"{Text}\"";
     }
 }
